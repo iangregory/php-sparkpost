@@ -12,8 +12,9 @@ class Transmission extends ResourceBase
     /**
      * Send post request to transmission endpoint after formatting cc, bcc, and expanding the shorthand emails.
      *
-     * @return SparkPostPromise or SparkPostResponse depending on sync or async request
+     * @return SparkPostResponse
      */
+    #[\Override]
     public function post($payload = [], $headers = [])
     {
         if (isset($payload['recipients']) && !isset($payload['recipients']['list_id'])) {
@@ -32,9 +33,9 @@ class Transmission extends ResourceBase
      */
     public function formatPayload($payload)
     {
-        $payload = $this->formatBlindCarbonCopy($payload); //Fixes BCCs into payload
-        $payload = $this->formatCarbonCopy($payload); //Fixes CCs into payload
-        $payload = $this->formatShorthandRecipients($payload); //Fixes shorthand recipients format
+        $payload = $this->formatBlindCarbonCopy($payload); // Fixes BCCs into payload
+        $payload = $this->formatCarbonCopy($payload); // Fixes CCs into payload
+        $payload = $this->formatShorthandRecipients($payload); // Fixes shorthand recipients format
 
         return $payload;
     }
@@ -48,8 +49,7 @@ class Transmission extends ResourceBase
      */
     private function formatBlindCarbonCopy($payload)
     {
-
-        //If there's a list of BCC recipients, move them into the correct format
+        // If there's a list of BCC recipients, move them into the correct format
         if (isset($payload['bcc'])) {
             $payload = $this->addListToRecipients($payload, 'bcc');
         }
@@ -73,7 +73,7 @@ class Transmission extends ResourceBase
             }
 
             // set up the content headers as either what it was before or an empty array
-            $payload['content']['headers'] = isset($payload['content']['headers']) ? $payload['content']['headers'] : [];
+            $payload['content']['headers'] ??= [];
             // add cc header
             $payload['content']['headers']['CC'] = implode(',', $ccAddresses);
 
@@ -126,7 +126,7 @@ class Transmission extends ResourceBase
             array_push($payload['recipients'], $recipient);
         }
 
-        //Delete the original object from the payload.
+        // Delete the original object from the payload.
         unset($payload[$listName]);
 
         return $payload;
@@ -148,7 +148,6 @@ class Transmission extends ResourceBase
             if ($this->isEmail($address)) {
                 $formatted['email'] = $address;
             } elseif (preg_match('/"?(.[^"]*)?"?\s*<(.+)>/', $address, $matches)) {
-                $name = trim($matches[1]);
                 $formatted['name'] = $matches[1];
                 $formatted['email'] = $matches[2];
             } else {

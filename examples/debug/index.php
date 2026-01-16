@@ -2,27 +2,30 @@
 
 namespace Examples\Templates;
 
-require dirname(__FILE__).'/../bootstrap.php';
+require dirname(__FILE__) . '/../bootstrap.php';
 
 use SparkPost\SparkPost;
-use GuzzleHttp\Client;
-use Http\Adapter\Guzzle6\Client as GuzzleAdapter;
+use Symfony\Component\HttpClient\Psr18Client;
 
-$httpClient = new GuzzleAdapter(new Client());
+// Create PSR-18 client (Symfony HTTP Client implements all three required interfaces)
+$psr18Client = new Psr18Client();
 
 /*
  * configure options in example-options.json
  */
-$sparky = new SparkPost($httpClient, [
-    "key" => getenv('SPARKPOST_API_KEY'),
-    // fetch API KEY from environment variable
-    "debug" => true
-]);
-
-$promise = $sparky->request('GET', 'templates');
+$sparky = new SparkPost(
+    $psr18Client,  // ClientInterface
+    $psr18Client,  // RequestFactoryInterface
+    $psr18Client,  // StreamFactoryInterface
+    [
+        'key' => getenv('SPARKPOST_API_KEY'),
+        // fetch API KEY from environment variable
+        'debug' => true,
+    ]
+);
 
 try {
-    $response = $promise->wait();
+    $response = $sparky->request('GET', 'templates');
 
     var_dump($response);
 
@@ -30,13 +33,13 @@ try {
     print_r($response->getRequest());
 
     echo "Response:\n";
-    echo $response->getStatusCode()."\n";
-    print_r($response->getBody())."\n";
+    echo $response->getStatusCode() . "\n";
+    print_r($response->getBody()) . "\n";
 } catch (\Exception $e) {
     echo "Request:\n";
     print_r($e->getRequest());
 
     echo "Exception:\n";
-    echo $e->getCode()."\n";
-    echo $e->getMessage()."\n";
+    echo $e->getCode() . "\n";
+    echo $e->getMessage() . "\n";
 }

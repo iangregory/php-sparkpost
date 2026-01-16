@@ -2,14 +2,14 @@
 
 namespace SparkPost;
 
-use Http\Client\Exception\HttpException as HttpException;
+use Psr\Http\Client\ClientExceptionInterface;
 
 class SparkPostException extends \Exception
 {
     /**
      * Variable to hold json decoded body from http response.
      */
-    private $body = null;
+    private $body;
 
     /**
      * Array with the request values sent.
@@ -19,7 +19,8 @@ class SparkPostException extends \Exception
     /**
      * Sets up the custom exception and copies over original exception values.
      *
-     * @param Exception $exception - the exception to be wrapped
+     * @param \Exception|ClientExceptionInterface $exception - the exception to be wrapped
+     * @param mixed                               $request   - the request values sent
      */
     public function __construct(\Exception $exception, $request = null)
     {
@@ -27,13 +28,30 @@ class SparkPostException extends \Exception
 
         $message = $exception->getMessage();
         $code = $exception->getCode();
-        if ($exception instanceof HttpException) {
-            $message = $exception->getResponse()->getBody()->__toString();
-            $this->body = json_decode($message, true);
-            $code = $exception->getResponse()->getStatusCode();
+
+        // PSR-18 ClientExceptionInterface doesn't define getResponse(),
+        // but many implementations (like Guzzle, Symfony) add it for non-network errors.
+        // Try to extract response if available for better error messages.
+        try {
+            $response = $exception->getResponse();
+            if ($response) {
+                $body = $response->getBody();
+                $message = $body->__toString();
+                $this->body = json_decode($message, true);
+                $code = $response->getStatusCode();
+            }
+        } catch (\Throwable $e) {
+            // If getting response fails (method doesn't exist or other error),
+            // just use the original exception message
         }
 
-        parent::__construct($message, $code, $exception->getPrevious());
+        try {
+            $previous = $exception->getPrevious();
+        } catch (\Throwable $e) {
+            $previous = null;
+        }
+
+        parent::__construct($message, $code, $previous);
     }
 
     /**

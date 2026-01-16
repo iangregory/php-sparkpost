@@ -2,11 +2,10 @@
 
 namespace SparkPost;
 
-use Http\Client\HttpClient;
-use Http\Client\HttpAsyncClient;
-use Http\Discovery\MessageFactoryDiscovery;
-use Http\Message\RequestFactory;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 
 class SparkPost
 {
@@ -16,14 +15,19 @@ class SparkPost
     private $version = '2.3.0';
 
     /**
-     * @var HttpClient|HttpAsyncClient used to make requests
+     * @var ClientInterface used to make requests
      */
     private $httpClient;
 
     /**
-     * @var RequestFactory
+     * @var RequestFactoryInterface
      */
-    private $messageFactory;
+    private $requestFactory;
+
+    /**
+     * @var StreamFactoryInterface
+     */
+    private $streamFactory;
 
     /**
      * @var array Options for requests
@@ -39,9 +43,8 @@ class SparkPost
         'port' => 443,
         'key' => '',
         'version' => 'v1',
-        'async' => true,
         'debug' => false,
-        'retries' => 0
+        'retries' => 0,
     ];
 
     /**
@@ -52,33 +55,37 @@ class SparkPost
     /**
      * Sets up the SparkPost instance.
      *
-     * @param HttpClient $httpClient - An httplug client or adapter
-     * @param array      $options    - An array to overide default options or a string to be used as an API key
+     * @param ClientInterface         $httpClient     - A PSR-18 HTTP client
+     * @param RequestFactoryInterface $requestFactory - A PSR-17 request factory
+     * @param StreamFactoryInterface  $streamFactory  - A PSR-17 stream factory
+     * @param array                   $options        - An array to overide default options or a string to be used as an API key
      */
-    public function __construct($httpClient, array $options)
-    {
+    public function __construct(
+        ClientInterface $httpClient,
+        RequestFactoryInterface $requestFactory,
+        StreamFactoryInterface $streamFactory,
+        array $options,
+    ) {
         $this->setOptions($options);
-        $this->setHttpClient($httpClient);
+        $this->httpClient = $httpClient;
+        $this->requestFactory = $requestFactory;
+        $this->streamFactory = $streamFactory;
         $this->setupEndpoints();
     }
 
     /**
-     * Sends either sync or async request based on async option.
+     * Sends request to SparkPost API.
      *
      * @param string $method
      * @param string $uri
      * @param array  $payload - either used as the request body or url query params
      * @param array  $headers
      *
-     * @return SparkPostPromise|SparkPostResponse Promise or Response depending on sync or async request
+     * @return SparkPostResponse
      */
     public function request($method = 'GET', $uri = '', $payload = [], $headers = [])
     {
-        if ($this->options['async'] === true) {
-            return $this->asyncRequest($method, $uri, $payload, $headers);
-        } else {
-            return $this->syncRequest($method, $uri, $payload, $headers);
-        }
+        return $this->syncRequest($method, $uri, $payload, $headers);
     }
 
     /**
@@ -96,15 +103,16 @@ class SparkPost
     public function syncRequest($method = 'GET', $uri = '', $payload = [], $headers = [])
     {
         $requestValues = $this->buildRequestValues($method, $uri, $payload, $headers);
-        $request = call_user_func_array(array($this, 'buildRequestInstance'), $requestValues);
+        $request = \call_user_func_array([$this, 'buildRequestInstance'], $requestValues);
 
         $retries = $this->options['retries'];
         try {
             if ($retries > 0) {
-              $resp = $this->syncReqWithRetry($request, $retries);
+                $resp = $this->syncReqWithRetry($request, $retries);
             } else {
-              $resp = $this->httpClient->sendRequest($request);
+                $resp = $this->httpClient->sendRequest($request);
             }
+
             return new SparkPostResponse($resp, $this->ifDebug($requestValues));
         } catch (\Exception $exception) {
             throw new SparkPostException($exception, $this->ifDebug($requestValues));
@@ -116,47 +124,10 @@ class SparkPost
         $resp = $this->httpClient->sendRequest($request);
         $status = $resp->getStatusCode();
         if ($status >= 500 && $status <= 599 && $retries > 0) {
-          return $this->syncReqWithRetry($request, $retries-1);
+            return $this->syncReqWithRetry($request, $retries - 1);
         }
+
         return $resp;
-    }
-
-    /**
-     * Sends async request to SparkPost API.
-     *
-     * @param string $method
-     * @param string $uri
-     * @param array  $payload
-     * @param array  $headers
-     *
-     * @return SparkPostPromise
-     */
-    public function asyncRequest($method = 'GET', $uri = '', $payload = [], $headers = [])
-    {
-        if ($this->httpClient instanceof HttpAsyncClient) {
-            $requestValues = $this->buildRequestValues($method, $uri, $payload, $headers);
-            $request = call_user_func_array(array($this, 'buildRequestInstance'), $requestValues);
-
-            $retries = $this->options['retries'];
-            if ($retries > 0) {
-                return new SparkPostPromise($this->asyncReqWithRetry($request, $retries), $this->ifDebug($requestValues));
-            } else {
-                return new SparkPostPromise($this->httpClient->sendAsyncRequest($request), $this->ifDebug($requestValues));
-            }
-        } else {
-            throw new \Exception('Your http client does not support asynchronous requests. Please use a different client or use synchronous requests.');
-        }
-    }
-
-    private function asyncReqWithRetry($request, $retries)
-    {
-        return $this->httpClient->sendAsyncRequest($request)->then(function($response) use ($request, $retries) {
-            $status = $response->getStatusCode();
-            if ($status >= 500 && $status <= 599 && $retries > 0) {
-                return $this->asyncReqWithRetry($request, $retries-1);
-            }
-            return $response;
-        });
     }
 
     /**
@@ -173,7 +144,7 @@ class SparkPost
     {
         $method = trim(strtoupper($method));
 
-        if ($method === 'GET') {
+        if ('GET' === $method) {
             $params = $payload;
             $body = [];
         } else {
@@ -186,6 +157,7 @@ class SparkPost
 
         // old form-feed workaround now removed
         $body = json_encode($body);
+
         return [
             'method' => $method,
             'url' => $url,
@@ -197,26 +169,34 @@ class SparkPost
     /**
      * Build RequestInterface from given params.
      *
-     * @param array $requestValues
-     *
      * @return RequestInterface
      */
     public function buildRequestInstance($method, $url, $headers, $body)
     {
-        return $this->getMessageFactory()->createRequest($method, $url, $headers, $body);
+        $request = $this->requestFactory->createRequest($method, $url);
+
+        foreach ($headers as $name => $value) {
+            $request = $request->withHeader($name, $value);
+        }
+
+        if (!empty($body)) {
+            $stream = $this->streamFactory->createStream($body);
+            $request = $request->withBody($stream);
+        }
+
+        return $request;
     }
 
     /**
      * Build RequestInterface from given params.
-     *
-     * @param array $requestValues
      *
      * @return RequestInterface
      */
     public function buildRequest($method, $uri, $payload, $headers)
     {
         $requestValues = $this->buildRequestValues($method, $uri, $payload, $headers);
-        return call_user_func_array(array($this, 'buildRequestInstance'), $requestValues);
+
+        return \call_user_func_array([$this, 'buildRequestInstance'], $requestValues);
     }
 
     /**
@@ -231,7 +211,7 @@ class SparkPost
         $constantHeaders = [
             'Authorization' => $this->options['key'],
             'Content-Type' => 'application/json',
-            'User-Agent' => 'php-sparkpost/'.$this->version,
+            'User-Agent' => "php-sparkpost/{$this->version}",
         ];
 
         foreach ($constantHeaders as $key => $value) {
@@ -259,7 +239,7 @@ class SparkPost
                 $value = implode(',', $value);
             }
 
-            array_push($paramsArray, $key.'='.$value);
+            array_push($paramsArray, "$key=$value");
         }
 
         $paramsString = implode('&', $paramsArray);
@@ -270,16 +250,12 @@ class SparkPost
     /**
      * Sets $httpClient to be used for request.
      *
-     * @param HttpClient|HttpAsyncClient $httpClient - the client to be used for request
+     * @param ClientInterface $httpClient - the PSR-18 client to be used for request
      *
      * @return SparkPost
      */
-    public function setHttpClient($httpClient)
+    public function setHttpClient(ClientInterface $httpClient)
     {
-        if (!($httpClient instanceof HttpAsyncClient || $httpClient instanceof HttpClient)) {
-            throw new \LogicException(sprintf('Parameter to SparkPost::setHttpClient must be instance of "%s" or "%s"', HttpClient::class, HttpAsyncClient::class));
-        }
-
         $this->httpClient = $httpClient;
 
         return $this;
@@ -295,7 +271,7 @@ class SparkPost
     public function setOptions($options)
     {
         // if the options map is a string we should assume that its an api key
-        if (is_string($options)) {
+        if (\is_string($options)) {
             $options = ['key' => $options];
         }
 
@@ -304,7 +280,7 @@ class SparkPost
             throw new \Exception('You must provide an API key');
         }
 
-        $this->options = isset($this->options) ? $this->options : self::$defaultOptions;
+        $this->options ??= self::$defaultOptions;
 
         // set options, overriding defaults
         foreach ($options as $option => $value) {
@@ -317,11 +293,7 @@ class SparkPost
     }
 
     /**
-     * Returns the given value if debugging, an empty instance otherwise.
-     *
-     * @param any $param
-     *
-     * @return any $param
+     * Returns the given value if debugging, null otherwise.
      */
     private function ifDebug($param)
     {
@@ -337,25 +309,21 @@ class SparkPost
     }
 
     /**
-     * @return RequestFactory
+     * @return SparkPost
      */
-    private function getMessageFactory()
+    public function setRequestFactory(RequestFactoryInterface $requestFactory)
     {
-        if (!$this->messageFactory) {
-            $this->messageFactory = MessageFactoryDiscovery::find();
-        }
+        $this->requestFactory = $requestFactory;
 
-        return $this->messageFactory;
+        return $this;
     }
 
     /**
-     * @param RequestFactory $messageFactory
-     *
      * @return SparkPost
      */
-    public function setMessageFactory(RequestFactory $messageFactory)
+    public function setStreamFactory(StreamFactoryInterface $streamFactory)
     {
-        $this->messageFactory = $messageFactory;
+        $this->streamFactory = $streamFactory;
 
         return $this;
     }

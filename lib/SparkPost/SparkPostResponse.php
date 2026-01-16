@@ -2,10 +2,13 @@
 
 namespace SparkPost;
 
-use Psr\Http\Message\ResponseInterface as ResponseInterface;
-use Psr\Http\Message\StreamInterface as StreamInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamInterface;
 
-class SparkPostResponse implements ResponseInterface
+/**
+ * SparkPostResponse wraps a PSR-7 ResponseInterface and provides convenience methods.
+ */
+class SparkPostResponse
 {
     /**
      * ResponseInterface to be wrapped by SparkPostResponse.
@@ -19,8 +22,6 @@ class SparkPostResponse implements ResponseInterface
 
     /**
      * set the response to be wrapped.
-     *
-     * @param ResponseInterface $response
      */
     public function __construct(ResponseInterface $response, $request = null)
     {
@@ -56,67 +57,67 @@ class SparkPostResponse implements ResponseInterface
     /**
      * pass these down to the response given in the constructor.
      */
-    public function getProtocolVersion()
+    public function getProtocolVersion(): string
     {
         return $this->response->getProtocolVersion();
     }
 
-    public function withProtocolVersion($version)
+    public function withProtocolVersion($version): self
     {
-        return $this->response->withProtocolVersion($version);
+        return new self($this->response->withProtocolVersion($version), $this->request);
     }
 
-    public function getHeaders()
+    public function getHeaders(): array
     {
         return $this->response->getHeaders();
     }
 
-    public function hasHeader($name)
+    public function hasHeader($name): bool
     {
         return $this->response->hasHeader($name);
     }
 
-    public function getHeader($name)
+    public function getHeader($name): array
     {
         return $this->response->getHeader($name);
     }
 
-    public function getHeaderLine($name)
+    public function getHeaderLine($name): string
     {
         return $this->response->getHeaderLine($name);
     }
 
-    public function withHeader($name, $value)
+    public function withHeader($name, $value): self
     {
-        return $this->response->withHeader($name, $value);
+        return new self($this->response->withHeader($name, $value), $this->request);
     }
 
-    public function withAddedHeader($name, $value)
+    public function withAddedHeader($name, $value): self
     {
-        return $this->response->withAddedHeader($name, $value);
+        return new self($this->response->withAddedHeader($name, $value), $this->request);
     }
 
-    public function withoutHeader($name)
+    public function withoutHeader($name): self
     {
-        return $this->response->withoutHeader($name);
+        return new self($this->response->withoutHeader($name), $this->request);
     }
 
-    public function withBody(StreamInterface $body)
+    public function withBody(StreamInterface $body): self
     {
-        return $this->response->withBody($body);
+        return new self($this->response->withBody($body), $this->request);
     }
 
-    public function getStatusCode()
+    public function getStatusCode(): int
     {
         return $this->response->getStatusCode();
     }
 
-    public function withStatus($code, $reasonPhrase = '')
+    public function withStatus($code, $reasonPhrase = ''): self
     {
-        return $this->response->withStatus($code, $reasonPhrase);
+        return new self($this->response->withStatus($code, $reasonPhrase), $this->request);
     }
 
-    public function getReasonPhrase()
+    public function getReasonPhrase(): string
     {
         return $this->response->getReasonPhrase();
     }
