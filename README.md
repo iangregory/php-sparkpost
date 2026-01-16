@@ -339,7 +339,7 @@ See [contributing](https://github.com/SparkPost/php-sparkpost/blob/master/CONTRI
 
 ## PSR-18 Migration
 
-**Version 3.0 migrated from HTTPlug to PSR-18 HTTP Client standard.**
+**This fork migrated from HTTPlug to PSR-18 HTTP Client standard.**
 
 ### Breaking Changes
 
