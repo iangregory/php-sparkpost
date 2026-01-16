@@ -13,3 +13,4 @@ test.php
 .DS_Store
 .gitignore
 .vscode/launch.json
+*.cache
