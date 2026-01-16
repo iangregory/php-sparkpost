@@ -3,12 +3,16 @@
 namespace SparkPost\Test;
 
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 use SparkPost\SparkPost;
-use Mockery;
 
 class TransmissionTest extends TestCase
 {
     private $clientMock;
+    private $requestFactoryMock;
+    private $streamFactoryMock;
     /** @var SparkPost */
     private $resource;
 
@@ -38,7 +42,6 @@ class TransmissionTest extends TestCase
         'bcc' => [
             ['address' => 'Emely Giraldo <emely.giraldo@sparkpost.com>'],
         ],
-
     ];
 
     private $getTransmissionPayload = [
@@ -54,15 +57,30 @@ class TransmissionTest extends TestCase
      */
     public function setUp(): void
     {
-        //setup mock for the adapter
-        $this->clientMock = Mockery::mock('Http\Adapter\Guzzle6\Client');
+        // setup mocks for PSR-18 client and PSR-17 factories
+        $this->clientMock = \Mockery::mock(ClientInterface::class);
+        $this->requestFactoryMock = \Mockery::mock(RequestFactoryInterface::class);
+        $this->streamFactoryMock = \Mockery::mock(StreamFactoryInterface::class);
 
-        $this->resource = new SparkPost($this->clientMock, ['key' => 'SPARKPOST_API_KEY', 'async' => false]);
+        // Setup default expectations for factories (will be called by every request)
+        $requestMock = \Mockery::mock('Psr\\Http\\Message\\RequestInterface');
+        $this->requestFactoryMock->shouldReceive('createRequest')->andReturn($requestMock)->byDefault();
+        $requestMock->shouldReceive('withHeader')->andReturnSelf()->byDefault();
+        $streamMock = \Mockery::mock('Psr\\Http\\Message\\StreamInterface');
+        $this->streamFactoryMock->shouldReceive('createStream')->andReturn($streamMock)->byDefault();
+        $requestMock->shouldReceive('withBody')->andReturn($requestMock)->byDefault();
+
+        $this->resource = new SparkPost(
+            $this->clientMock,
+            $this->requestFactoryMock,
+            $this->streamFactoryMock,
+            ['key' => 'SPARKPOST_API_KEY']
+        );
     }
 
     public function tearDown(): void
     {
-        Mockery::close();
+        \Mockery::close();
     }
 
     public function testInvalidEmailFormat()
@@ -78,14 +96,14 @@ class TransmissionTest extends TestCase
 
     public function testGet()
     {
-        $responseMock = Mockery::mock('Psr\Http\Message\ResponseInterface');
-        $responseBodyMock = Mockery::mock();
+        $responseMock = \Mockery::mock('Psr\Http\Message\ResponseInterface');
+        $responseBodyMock = \Mockery::mock('Psr\\Http\\Message\\StreamInterface');
 
         $responseBody = ['results' => 'yay'];
 
         $this->clientMock->shouldReceive('sendRequest')->
             once()->
-            with(Mockery::type('GuzzleHttp\Psr7\Request'))->
+
             andReturn($responseMock);
 
         $responseMock->shouldReceive('getStatusCode')->andReturn(200);
@@ -100,14 +118,14 @@ class TransmissionTest extends TestCase
 
     public function testPut()
     {
-        $responseMock = Mockery::mock('Psr\Http\Message\ResponseInterface');
-        $responseBodyMock = Mockery::mock();
+        $responseMock = \Mockery::mock('Psr\Http\Message\ResponseInterface');
+        $responseBodyMock = \Mockery::mock('Psr\\Http\\Message\\StreamInterface');
 
         $responseBody = ['results' => 'yay'];
 
         $this->clientMock->shouldReceive('sendRequest')->
             once()->
-            with(Mockery::type('GuzzleHttp\Psr7\Request'))->
+
             andReturn($responseMock);
 
         $responseMock->shouldReceive('getStatusCode')->andReturn(200);
@@ -122,14 +140,14 @@ class TransmissionTest extends TestCase
 
     public function testPost()
     {
-        $responseMock = Mockery::mock('Psr\Http\Message\ResponseInterface');
-        $responseBodyMock = Mockery::mock();
+        $responseMock = \Mockery::mock('Psr\Http\Message\ResponseInterface');
+        $responseBodyMock = \Mockery::mock('Psr\\Http\\Message\\StreamInterface');
 
         $responseBody = ['results' => 'yay'];
 
         $this->clientMock->shouldReceive('sendRequest')->
             once()->
-            with(Mockery::type('GuzzleHttp\Psr7\Request'))->
+
             andReturn($responseMock);
 
         $responseMock->shouldReceive('getStatusCode')->andReturn(200);
@@ -147,14 +165,14 @@ class TransmissionTest extends TestCase
         $postTransmissionPayload = $this->postTransmissionPayload;
         $postTransmissionPayload['recipients'] = ['list_id' => 'SOME_LIST_ID'];
 
-        $responseMock = Mockery::mock('Psr\Http\Message\ResponseInterface');
-        $responseBodyMock = Mockery::mock();
+        $responseMock = \Mockery::mock('Psr\Http\Message\ResponseInterface');
+        $responseBodyMock = \Mockery::mock('Psr\\Http\\Message\\StreamInterface');
 
         $responseBody = ['results' => 'yay'];
 
         $this->clientMock->shouldReceive('sendRequest')->
             once()->
-            with(Mockery::type('GuzzleHttp\Psr7\Request'))->
+
             andReturn($responseMock);
 
         $responseMock->shouldReceive('getStatusCode')->andReturn(200);
@@ -169,14 +187,14 @@ class TransmissionTest extends TestCase
 
     public function testDelete()
     {
-        $responseMock = Mockery::mock('Psr\Http\Message\ResponseInterface');
-        $responseBodyMock = Mockery::mock();
+        $responseMock = \Mockery::mock('Psr\Http\Message\ResponseInterface');
+        $responseBodyMock = \Mockery::mock('Psr\\Http\\Message\\StreamInterface');
 
         $responseBody = ['results' => 'yay'];
 
         $this->clientMock->shouldReceive('sendRequest')->
             once()->
-            with(Mockery::type('GuzzleHttp\Psr7\Request'))->
+
             andReturn($responseMock);
 
         $responseMock->shouldReceive('getStatusCode')->andReturn(200);

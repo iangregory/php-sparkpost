@@ -1,5 +1,3 @@
-<a href="https://www.sparkpost.com"><img src="https://www.sparkpost.com/sites/default/files/attachments/SparkPost_Logo_2-Color_Gray-Orange_RGB.svg" width="200px"/></a>
-
 [Sign up](https://app.sparkpost.com/join?plan=free-0817?src=Social%20Media&sfdcid=70160000000pqBb&pc=GitHubSignUp&utm_source=github&utm_medium=social-media&utm_campaign=github&utm_content=sign-up) for a SparkPost account and visit our [Developer Hub](https://developers.sparkpost.com) for even more content.
 
 # SparkPost PHP Library
@@ -9,31 +7,32 @@
 [![Downloads](https://img.shields.io/packagist/dt/sparkpost/sparkpost.svg?maxAge=3600)](https://packagist.org/packages/sparkpost/sparkpost)
 [![Packagist](https://img.shields.io/packagist/v/sparkpost/sparkpost.svg?maxAge=3600)](https://packagist.org/packages/sparkpost/sparkpost)
 
-The official PHP library for using [the SparkPost REST API](https://developers.sparkpost.com/api/).
+A fork of the official PHP library for using [the SparkPost REST API](https://developers.sparkpost.com/api/).
 
 Before using this library, you must have a valid API Key. To get an API Key, please log in to your SparkPost account and generate one in the Settings page.
 
 ## Installation
-**Please note: The composer package `sparkpost/php-sparkpost` has been changed to `sparkpost/sparkpost` starting with version 2.0.**
+
+**This fork uses PSR-18 HTTP Client standard instead of HTTPlug. See [PSR-18 Migration](#psr-18-migration) for upgrade instructions.**
 
 The recommended way to install the SparkPost PHP Library is through composer.
 
-```
+```bash
 # Install Composer
 curl -sS https://getcomposer.org/installer | php
 ```
 
-Sparkpost requires php-http client (see [Setting up a Request Adapter](#setting-up-a-request-adapter)). There are several [providers](https://packagist.org/providers/php-http/client-implementation) available. If you were using guzzle6 your install might look like this.
+SparkPost requires a PSR-18 HTTP client implementation. We recommend Symfony HTTP Client:
 
-```
-composer require php-http/guzzle6-adapter "^1.1"
-composer require guzzlehttp/guzzle "^6.0"
-```
-
-Next, run the Composer command to install the SparkPost PHP Library:
-
-```
+```bash
 composer require sparkpost/sparkpost
+composer require symfony/http-client nyholm/psr7
+```
+
+Alternatively, you can use Guzzle 7 or any other PSR-18 compatible client:
+
+```bash
+composer require guzzlehttp/guzzle "^7.0"
 ```
 
 After installing, you need to require Composer's autoloader:
@@ -45,36 +44,31 @@ use SparkPost\SparkPost;
 
 **Note:** Without composer the costs outweigh the benefits of using the PHP client library. A simple function like the one in [issue #164](https://github.com/SparkPost/php-sparkpost/issues/164#issuecomment-289888237) wraps the SparkPost API and makes it easy to use the API without resolving the composer dependencies.
 
-## Running with IDEs
+## Setting up a PSR-18 HTTP Client
 
-When running with `xdebug` under an IDE such as VS Code, you may see an exception is thrown in file `vendor/php-http/discovery/src/Strategy/PuliBetaStrategy.php`:
+SparkPost requires a PSR-18 compatible HTTP client. The library uses PSR-18 (HTTP Client), PSR-17 (HTTP Factories), and PSR-7 (HTTP Messages) standards.
 
-```
-Exception has occurred.
-Http\Discovery\Exception\PuliUnavailableException: Puli Factory is not available
-```
+### Quick Start with Symfony HTTP Client (Recommended)
 
-[This is usual](http://docs.php-http.org/en/latest/discovery.html#puli-factory-is-not-available). Puli is not required to use the library. You can resume running after the exception.
-
-You can prevent the exception, by setting the discovery strategies, prior to creating the adapter object:
 ```php
-// Prevent annoying "Puli exception" during work with xdebug / IDE
-// See https://github.com/getsentry/sentry-php/issues/801
-\Http\Discovery\ClassDiscovery::setStrategies([
-        // \Http\Discovery\Strategy\PuliBetaStrategy::class, // Deliberately disabled
-        \Http\Discovery\Strategy\CommonClassesStrategy::class,
-        \Http\Discovery\Strategy\CommonPsr17ClassesStrategy::class,
-]);
+<?php
+require 'vendor/autoload.php';
+
+use SparkPost\SparkPost;
+use Symfony\Component\HttpClient\Psr18Client;
+
+// Symfony HTTP Client implements all three required interfaces
+$httpClient = new Psr18Client();
+
+$sparky = new SparkPost(
+    $httpClient,  // ClientInterface
+    $httpClient,  // RequestFactoryInterface
+    $httpClient,  // StreamFactoryInterface
+    ['key' => 'YOUR_API_KEY']
+);
 ```
 
-## Setting up a Request Adapter
-
-Because of dependency collision, we have opted to use a request adapter rather than
-requiring a request library.  This means that your application will need to pass in
-a request adapter to the constructor of the SparkPost Library.  We use the [HTTPlug](https://github.com/php-http/httplug) in SparkPost. Please visit their repo for a list of supported [clients and adapters](http://docs.php-http.org/en/latest/clients.html).  If you don't currently use a request library, you will
-need to require one and create a client from it and pass it along. The example below uses the GuzzleHttp Client Library.
-
-A Client can be setup like so:
+### Using Guzzle 7
 
 ```php
 <?php
@@ -82,22 +76,37 @@ require 'vendor/autoload.php';
 
 use SparkPost\SparkPost;
 use GuzzleHttp\Client;
-use Http\Adapter\Guzzle6\Client as GuzzleAdapter;
+use GuzzleHttp\Psr7\HttpFactory;
 
-$httpClient = new GuzzleAdapter(new Client());
-$sparky = new SparkPost($httpClient, ['key'=>'YOUR_API_KEY']);
-?>
+$guzzle = new Client();
+$factory = new HttpFactory();
+
+$sparky = new SparkPost(
+    $guzzle,   // ClientInterface
+    $factory,  // RequestFactoryInterface
+    $factory,  // StreamFactoryInterface
+    ['key' => 'YOUR_API_KEY']
+);
 ```
 
 ## Initialization
-#### new Sparkpost(httpClient, options)
+#### new SparkPost(httpClient, requestFactory, streamFactory, options)
 * `httpClient`
     * Required: Yes
-    * HTTP client or adapter supported by HTTPlug
+    * Type: `Psr\Http\Client\ClientInterface`
+    * PSR-18 HTTP client implementation
+* `requestFactory`
+    * Required: Yes
+    * Type: `Psr\Http\Message\RequestFactoryInterface`
+    * PSR-17 request factory
+* `streamFactory`
+    * Required: Yes
+    * Type: `Psr\Http\Message\StreamFactoryInterface`
+    * PSR-17 stream factory
 * `options`
     * Required: Yes
-    * Type: `String` or `Array`
-    * A valid Sparkpost API key or an array of options
+    * Type: `Array`
+    * Configuration array with API key and other options
 * `options.key`
     * Required: Yes
     * Type: `String`
@@ -309,50 +318,10 @@ catch (\Exception $e) {
 }
 ```
 
-### Asynchronous
-Asynchronous an be handled in two ways: by passing callbacks or waiting for the promise to be fulfilled. Waiting acts like synchronous request.
-##### Wait (Synchronous)
-```php
-
-$promise = ... // YOUR API CALL GOES HERE
-
-try {
-    $response = $promise->wait();
-    echo $response->getStatusCode()."\n";
-    print_r($response->getBody())."\n";
-} catch (\Exception $e) {
-    echo $e->getCode()."\n";
-    echo $e->getMessage()."\n";
-}
-
-echo "I will print out after the promise is fulfilled";
-```
-
-##### Then (Asynchronous)
-```php
-$promise = ... // YOUR API CALL GOES HERE
-
-$promise->then(
-    // Success callback
-    function ($response) {
-        echo $response->getStatusCode()."\n";
-        print_r($response->getBody())."\n";
-    },
-    // Failure callback
-    function (Exception $e) {
-        echo $e->getCode()."\n";
-        echo $e->getMessage()."\n";
-    }
-);
-
-echo "I will print out before the promise is fulfilled";
-
-// You can combine multiple promises using \GuzzleHttp\Promise\all() and other functions from the library.
-$promise->wait();
-```
 
 ## Handling Exceptions
-An exception will be thrown in two cases: there is a problem with the request or  the server returns a status code of `400` or higher.
+
+The library throws `SparkPostException` when there is a problem with the request or the server returns a status code of `400` or higher.
 
 ### SparkPostException
 * **getCode()**
@@ -367,3 +336,84 @@ An exception will be thrown in two cases: there is a problem with the request or
 
 ### Contributing
 See [contributing](https://github.com/SparkPost/php-sparkpost/blob/master/CONTRIBUTING.md).
+
+## PSR-18 Migration
+
+**Version 3.0 migrated from HTTPlug to PSR-18 HTTP Client standard.**
+
+### Breaking Changes
+
+1. **Constructor signature changed**:
+   ```php
+   // Old (v2.x with HTTPlug)
+   $sparky = new SparkPost($httpClient, ['key' => 'YOUR_API_KEY']);
+
+   // New (v3.x with PSR-18)
+   use Symfony\Component\HttpClient\Psr18Client;
+
+   $psr18Client = new Psr18Client();
+   $sparky = new SparkPost(
+       $psr18Client,        // ClientInterface
+       $psr18Client,        // RequestFactoryInterface
+       $psr18Client,        // StreamFactoryInterface
+       ['key' => 'YOUR_API_KEY']
+   );
+   ```
+
+2. **Async support removed**: PSR-18 does not support asynchronous requests. All requests are now synchronous.
+   - Removed `asyncRequest()` method
+   - Removed `async` option from constructor
+   - Removed `SparkPostPromise` class
+   - The `request()` method now always returns `SparkPostResponse` instead of `SparkPostPromise`
+   - Use `->wait()` is no longer needed/available
+
+3. **HTTP client discovery removed**: HTTP client and factories must be explicitly provided. No auto-discovery.
+
+4. **Dependencies changed**:
+   - Removed: `php-http/httplug`, `php-http/message`, `php-http/discovery`
+   - Added: `psr/http-client`, `psr/http-factory`, `psr/http-message`
+   - Recommended: `symfony/http-client`, `nyholm/psr7`
+
+### Migration Steps
+
+1. Update composer dependencies:
+   ```bash
+   composer remove php-http/httplug php-http/message php-http/discovery
+   composer require symfony/http-client nyholm/psr7
+   ```
+
+2. Update SparkPost instantiation:
+   ```php
+   // Replace HTTPlug adapter
+   use Symfony\Component\HttpClient\Psr18Client;
+
+   $psr18Client = new Psr18Client();
+   $sparky = new SparkPost($psr18Client, $psr18Client, $psr18Client, ['key' => 'YOUR_API_KEY']);
+   ```
+
+3. Remove async code:
+   ```php
+   // Old async code
+   $promise = $sparky->request('GET', 'templates');
+   $response = $promise->wait();
+
+   // New synchronous code
+   $response = $sparky->request('GET', 'templates');
+   ```
+
+4. Remove promise callbacks:
+   ```php
+   // Old
+   $promise->then(
+       function($response) { /* ... */ },
+       function($exception) { /* ... */ }
+   );
+
+   // New - use try/catch
+   try {
+       $response = $sparky->request('GET', 'templates');
+       // handle success
+   } catch (\SparkPost\SparkPostException $e) {
+       // handle error
+   }
+   ```

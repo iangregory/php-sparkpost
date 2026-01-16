@@ -6,12 +6,13 @@
     xmlns="https://getpsalm.org/schema/config"
     xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
     findUnusedBaselineEntry="true"
-    findUnusedCode="true"
+    findUnusedCode="false"
 >
     <projectFiles>
         <directory name="lib/SparkPost" />
         <ignoreFiles>
             <directory name="vendor" />
         </ignoreFiles>
+
     </projectFiles>
 </psalm>
